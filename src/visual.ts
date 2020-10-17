@@ -38,6 +38,7 @@ import IVisualHost = powerbi.extensibility.visual.IVisualHost;
 import VisualObjectInstanceEnumerationObject = powerbi.VisualObjectInstanceEnumerationObject;
 import ISandboxExtendedColorPalette = powerbi.extensibility.ISandboxExtendedColorPalette;
 import * as d3 from 'd3';
+import { wingData, transformData } from './data';
 
 import { VisualSettings } from "./settings";
 import { ScaleOrdinal } from "d3";
@@ -61,13 +62,52 @@ export class Visual implements IVisual {
     public update(options: VisualUpdateOptions) {
         this.settings = Visual.parseSettings(options && options.dataViews && options.dataViews[0]);
 
+console.log(options.dataViews);
+
         let h = options.viewport.height;
         let w = options.viewport.width;
 
         // allows us to use the colors from the selected template
         let colorPalette: ISandboxExtendedColorPalette = this.host.colorPalette;
 
-        let wingData:Array<any> = [
+        transformData(options, this.host);
+        console.log(wingData);
+/*
+        let data_view = options.dataViews[0].table;
+
+        let role_map = [];
+        for (let dv = 0; dv < data_view.columns.length; dv++) {
+            if (data_view.columns[dv].roles.segments == true) role_map['segments'] = dv;
+            if (data_view.columns[dv].roles.layers == true) role_map['layers'] = dv;
+            if (data_view.columns[dv].roles.data_values == true) role_map['data_values'] = dv;
+        }
+
+        let segment_array:Array<any> = [];
+        for (let row = 0; row < data_view.rows.length; row++) {
+          segment_array[data_view.rows[row][role_map['segments']] as string] = [];
+        }
+        for (let row = 0; row < data_view.rows.length; row++) {
+          let mrow:Array<any> = segment_array[data_view.rows[row][role_map['segments'] as string]];
+          mrow.push([data_view.rows[row][role_map['layers']] as string, data_view.rows[row][role_map['data_values']] as number]);
+        }
+        //console.log(segment_array);
+        let wingData:Array<any> = [];
+        var segment_keys = Object.keys(segment_array);
+        let sTotal:number = 0;
+        for(var i = 0; i < segment_keys.length;i++) {
+            let segment_arr = {};
+            segment_arr["month"] = segment_keys[i];
+            sTotal = 0;
+            for(var s = 0; s < segment_array[segment_keys[i]].length; s++) {
+                segment_arr[segment_array[segment_keys[i]][s][0]] = segment_array[segment_keys[i]][s][1];
+                sTotal+= segment_array[segment_keys[i]][s][1] as number;
+            }
+            segment_arr["total"] = sTotal;
+            wingData.push(segment_arr);
+        }
+        console.log(wingData);
+
+        let wingDataOld:Array<any> = [
             { "month": "Jan", "AZ": 6, "SC": 40, "NC": 56, "total": 102 },
             { "month": "Feb", "AZ": 3, "SC": 59, "NC": 99, "total": 161 },
             { "month": "Mar", "AZ": 6, "SC": 55, "NC": 76, "total": 137 },
@@ -81,7 +121,8 @@ export class Visual implements IVisual {
             { "month": "Nov", "AZ": 8, "SC": 72, "NC": 75, "total": 155 },
             { "month": "Dec", "AZ": 11, "SC": 54, "NC": 46, "total": 111 }
         ];
-
+        console.log(wingDataOld);
+*/
 
         let arc_interval = 100; // animation time for each arc
 
@@ -100,27 +141,21 @@ export class Visual implements IVisual {
         let rScale = d3.scaleLinear()
             .domain([0, d3.max(wingData, d => d.total)])
             .range([innerRadius, outerRadius]);
-        
+
         let wingStack = d3.stack().keys(wings)(wingData)
             .map(d => (d.forEach(v => v['key'] = d.key), d));
 
-        let interval_count: number = wingStack[0].length; // normally will be 12, one for each month
-        console.log(interval_count);
+            let color = d3.scaleOrdinal()
+            .domain(wingStack.map(d => d.key))
+            .range(d3.schemeCategory10)
+            .unknown("#ccc")
+  
+          let interval_count: number = wingStack[0].length; // normally will be 12, one for each month
 
         let pie = d3.pie()
             .value(function (d, i) { return i + 1; });
 
         let yTicksValues = d3.ticks(0, d3.max(wingData, d => d.total), 4);
-
-        let arcGen = d3.arc();
-
-        arcGen.innerRadius(function (d) { return rScale(d[0]); })
-            .outerRadius(function (d) { return rScale(d[1]); })
-
-        let pth = arcGen({
-            startAngle: function (d, i) { return ((Math.PI * 2) / interval_count) * i },
-            endAngle: function (d, i) { return ((Math.PI * 2) / interval_count) * (i + 1) }
-        });
 
         // Arcs for the donut
         svg.append("g")
@@ -133,11 +168,15 @@ export class Visual implements IVisual {
             .data(function (d) { return d; })
             .enter().append("path")
             .attr("id", function (d, i) { return "arc_" + wings.indexOf(d['key']) + "_" + i; })
-            .attr("d", pth)
+            .attr("d", <any>d3.arc()
+              .innerRadius(function (d) { return rScale(d[0]); })
+              .outerRadius(function (d) { return rScale(d[1]); })
+              .startAngle(function (d, i) { return ((Math.PI * 2) / interval_count) * i })
+              .endAngle(function (d, i) { return ((Math.PI * 2) / interval_count) * (i + 1) }))
             .transition()
             .duration(2400)
             .ease(d3.easeLinear)
-            .attr("fill", "red")
+            .attr("fill", d => <string>color(d['key']))
             .delay(function (d, i) {
                 return (
                     ((wings.indexOf(d['key']) * (interval_count * arc_interval)) + (i * arc_interval))
