@@ -30,19 +30,15 @@ import { dataViewObjectsParser } from "powerbi-visuals-utils-dataviewutils";
 import DataViewObjectsParser = dataViewObjectsParser.DataViewObjectsParser;
 
 export class VisualSettings extends DataViewObjectsParser {
-      public dataPoint: dataPointSettings = new dataPointSettings();
-      }
+  public mainOptions: visualOptions = new visualOptions();
+}
 
-    export class dataPointSettings {
-     // Default color
-      public defaultColor: string = "";
-     // Show all
-      public showAllDataPoints: boolean = true;
-     // Fill
-      public fill: string = "";
-     // Color saturation
-      public fillRule: string = "";
-     // Text Size
-      public fontSize: number = 12;
+    export class visualOptions {
+     // Font family
+      public fontFamily: string = "Verdana";
+     // Font size for the layer label
+      public layerLabelSize: number = 18;
+     // Font size for the legend
+      public legendSize: number = 12;
      }
 

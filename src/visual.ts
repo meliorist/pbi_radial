@@ -40,7 +40,9 @@ import ISandboxExtendedColorPalette = powerbi.extensibility.ISandboxExtendedColo
 import * as d3 from 'd3';
 import { wingData, transformData } from './data';
 
-import { VisualSettings } from "./settings";
+import { textMeasurementService } from "powerbi-visuals-utils-formattingutils";
+
+import { VisualSettings, visualOptions } from "./settings";
 import { ScaleOrdinal } from "d3";
 export class Visual implements IVisual {
     private target: HTMLElement;
@@ -62,67 +64,14 @@ export class Visual implements IVisual {
     public update(options: VisualUpdateOptions) {
         this.settings = Visual.parseSettings(options && options.dataViews && options.dataViews[0]);
 
-console.log(options.dataViews);
-
         let h = options.viewport.height;
         let w = options.viewport.width;
 
         // allows us to use the colors from the selected template
         let colorPalette: ISandboxExtendedColorPalette = this.host.colorPalette;
 
+        // call the function from data.ts that preps the data
         transformData(options, this.host);
-        console.log(wingData);
-/*
-        let data_view = options.dataViews[0].table;
-
-        let role_map = [];
-        for (let dv = 0; dv < data_view.columns.length; dv++) {
-            if (data_view.columns[dv].roles.segments == true) role_map['segments'] = dv;
-            if (data_view.columns[dv].roles.layers == true) role_map['layers'] = dv;
-            if (data_view.columns[dv].roles.data_values == true) role_map['data_values'] = dv;
-        }
-
-        let segment_array:Array<any> = [];
-        for (let row = 0; row < data_view.rows.length; row++) {
-          segment_array[data_view.rows[row][role_map['segments']] as string] = [];
-        }
-        for (let row = 0; row < data_view.rows.length; row++) {
-          let mrow:Array<any> = segment_array[data_view.rows[row][role_map['segments'] as string]];
-          mrow.push([data_view.rows[row][role_map['layers']] as string, data_view.rows[row][role_map['data_values']] as number]);
-        }
-        //console.log(segment_array);
-        let wingData:Array<any> = [];
-        var segment_keys = Object.keys(segment_array);
-        let sTotal:number = 0;
-        for(var i = 0; i < segment_keys.length;i++) {
-            let segment_arr = {};
-            segment_arr["month"] = segment_keys[i];
-            sTotal = 0;
-            for(var s = 0; s < segment_array[segment_keys[i]].length; s++) {
-                segment_arr[segment_array[segment_keys[i]][s][0]] = segment_array[segment_keys[i]][s][1];
-                sTotal+= segment_array[segment_keys[i]][s][1] as number;
-            }
-            segment_arr["total"] = sTotal;
-            wingData.push(segment_arr);
-        }
-        console.log(wingData);
-
-        let wingDataOld:Array<any> = [
-            { "month": "Jan", "AZ": 6, "SC": 40, "NC": 56, "total": 102 },
-            { "month": "Feb", "AZ": 3, "SC": 59, "NC": 99, "total": 161 },
-            { "month": "Mar", "AZ": 6, "SC": 55, "NC": 76, "total": 137 },
-            { "month": "Apr", "AZ": 6, "SC": 46, "NC": 69, "total": 121 },
-            { "month": "May", "AZ": 12, "SC": 89, "NC": 88, "total": 189 },
-            { "month": "Jun", "AZ": 8, "SC": 122, "NC": 74, "total": 204 },
-            { "month": "Jul", "AZ": 11, "SC": 113, "NC": 70, "total": 194 },
-            { "month": "Aug", "AZ": 14, "SC": 64, "NC": 55, "total": 133 },
-            { "month": "Sep", "AZ": 7, "SC": 55, "NC": 69, "total": 131 },
-            { "month": "Oct", "AZ": 7, "SC": 39, "NC": 61, "total": 238 },
-            { "month": "Nov", "AZ": 8, "SC": 72, "NC": 75, "total": 155 },
-            { "month": "Dec", "AZ": 11, "SC": 54, "NC": 46, "total": 111 }
-        ];
-        console.log(wingDataOld);
-*/
 
         let arc_interval = 100; // animation time for each arc
 
@@ -150,12 +99,34 @@ console.log(options.dataViews);
             .range(d3.schemeCategory10)
             .unknown("#ccc")
   
-          let interval_count: number = wingStack[0].length; // normally will be 12, one for each month
+        let interval_count: number = wingStack[0].length; // normally will be 12, one for each month
 
         let pie = d3.pie()
             .value(function (d, i) { return i + 1; });
 
         let yTicksValues = d3.ticks(0, d3.max(wingData, d => d.total), 4);
+
+        // get the widths of the largest labels for alignment
+        let layerLabels = wingStack.map(d => d.key);
+        let maxLegendSize:number = 0;
+        let maxLabelSize:number = 0;
+        let thisSize:number = 0;
+        for (let l = 0; l < layerLabels.length; l++) {
+            thisSize = textMeasurementService.measureSvgTextWidth({
+                text: layerLabels[l],
+                fontFamily: this.settings.mainOptions.fontFamily,
+                fontSize: this.settings.mainOptions.layerLabelSize + "pt"
+            });
+            if (thisSize > maxLabelSize) maxLabelSize = thisSize;
+            thisSize = textMeasurementService.measureSvgTextWidth({
+                text: layerLabels[l],
+                fontFamily: this.settings.mainOptions.fontFamily,
+                fontSize: this.settings.mainOptions.legendSize + "pt"
+            });
+            if (thisSize > maxLegendSize) maxLegendSize = thisSize
+        }
+        console.log(maxLegendSize);
+        console.log(maxLabelSize);
 
         // Arcs for the donut
         svg.append("g")
@@ -214,9 +185,12 @@ console.log(options.dataViews);
             .enter()
             .append("text")
             .attr("class", "category-text")
-            .attr("x", outerRadius - ((innerRadius - 20) / 2))
-            .attr("y", outerRadius + 14)
-            .attr("height", 40)
+            .style("font-size", this.settings.mainOptions.layerLabelSize + "pt")
+            .style("font-family", this.settings.mainOptions.fontFamily)
+            .attr("text-anchor", "middle")
+            .attr("x", outerRadius)
+            .attr("y", outerRadius + (this.settings.mainOptions.layerLabelSize / 2))
+            .attr("height", this.settings.mainOptions.layerLabelSize * 1.33)
             .attr("width", innerRadius - 20)
             .text(function (d, i) { return d['key']; })
             .attr("stroke", d => colorPalette.getColor(d['key'] as string).value)
@@ -261,15 +235,18 @@ console.log(options.dataViews);
             .text(function (d) { return d; });
 
         // legend
+        let legendHeight:number = this.settings.mainOptions.legendSize * 1.33;
         svg.selectAll(".legend")
             .data(wingStack)
             .enter()
             .append("text")
             .attr("class", "legend-text")
-            .attr("x", w - 40)
-            .attr("y", function (d,i) { return (i * 20) + 40; })
-            .attr("height", 40)
-            .attr("width", 40)
+            .style("font-size", this.settings.mainOptions.legendSize + "pt")
+            .style("font-family", this.settings.mainOptions.fontFamily)
+            .attr("x", w - (maxLegendSize + 10))
+            .attr("y", function (d,i) { return (i * legendHeight) + 40; })
+            .attr("height", legendHeight)
+            .attr("width", (maxLegendSize + 10))
             .text(function (d) { return d['key']; })
             .attr("stroke", d => colorPalette.getColor(d['key'] as string).value)
             .attr("fill", d => colorPalette.getColor(d['key'] as string).value)
